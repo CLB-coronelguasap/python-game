@@ -32,7 +32,52 @@ def get_country_name_from_filename(filename):
     """Extract the country name from the filename based on its abbreviation."""
     abbreviation = filename.split('.')[0].upper()  # Get the part before the extension and convert to uppercase
     country = pycountry.countries.get(alpha_2=abbreviation)
-    return country.name if country else "Unknown Country"
+    return country.official_name if country and hasattr(country, 'official_name') else country.name if country else "Unknown Country"
+
+def zoom_in_out(scale_factor, zoom_level, min_x, min_y, max_x, max_y):
+    """Adjust the zoom level dynamically while preserving the aspect ratio."""
+    zoom_factor = 1.1 if zoom_level > 0 else 0.9  # Gradual zoom in or out
+    scale_factor *= zoom_factor
+
+    # Calculate the new viewport dimensions while preserving the aspect ratio
+    width = (max_x - min_x) * scale_factor
+    height = (max_y - min_y) * scale_factor
+    aspect_ratio = width / height
+
+    # Center the viewport
+    center_x = (min_x + max_x) / 2
+    center_y = (min_y + max_y) / 2
+
+    # Adjust the world coordinates to preserve the aspect ratio
+    if aspect_ratio > 1:  # Wider than tall
+        turtle.setworldcoordinates(
+            center_x - width / 2,
+            center_y - (width / aspect_ratio) / 2,
+            center_x + width / 2,
+            center_y + (width / aspect_ratio) / 2
+        )
+    else:  # Taller than wide
+        turtle.setworldcoordinates(
+            center_x - (height * aspect_ratio) / 2,
+            center_y - height / 2,
+            center_x + (height * aspect_ratio) / 2,
+            center_y + height / 2
+        )
+
+    return scale_factor
+
+def move_view(dx, dy, scale_factor, min_x, min_y, max_x, max_y):
+    """Move the view by adjusting the world coordinates."""
+    width = (max_x - min_x) * scale_factor
+    height = (max_y - min_y) * scale_factor
+
+    # Adjust the world coordinates based on the movement
+    turtle.setworldcoordinates(
+        min_x * scale_factor + dx,
+        min_y * scale_factor + dy,
+        min_x * scale_factor + dx + width,
+        min_y * scale_factor + dy + height
+    )
 
 def svg_to_turtle(svg_file):
     try:
@@ -106,7 +151,6 @@ def svg_to_turtle(svg_file):
 
         # Parse paths and interleave drawing operations
         paths = [parse_path(path_element.attrib.get('d')) for path_element in path_elements if path_element.attrib.get('d')]
-        max_segments = max(len(path) for path in paths)
 
         for path, t in zip(paths, turtles):
             t.penup()
@@ -114,11 +158,44 @@ def svg_to_turtle(svg_file):
             t.begin_fill()
             for segment in path:
                 draw_segment(t, segment, scale_factor)
+            t.penup()  # Ensure no unintended lines are drawn
             t.goto(path[0].start.real * scale_factor, -path[0].start.imag * scale_factor)  # Close the path
             t.end_fill()
             t.hideturtle()
 
         turtle.update()  # Re-enable screen updates
+
+        # Add zoom functionality
+        def zoom_in():
+            nonlocal scale_factor
+            scale_factor = zoom_in_out(scale_factor, 1, min_x, min_y, max_x, max_y)
+
+        def zoom_out():
+            nonlocal scale_factor
+            scale_factor = zoom_in_out(scale_factor, -1, min_x, min_y, max_x, max_y)
+
+        # Add pan functionality
+        def pan_left():
+            move_view(-50, 0, scale_factor, min_x, min_y, max_x, max_y)
+
+        def pan_right():
+            move_view(50, 0, scale_factor, min_x, min_y, max_x, max_y)
+
+        def pan_up():
+            move_view(0, 50, scale_factor, min_x, min_y, max_x, max_y)
+
+        def pan_down():
+            move_view(0, -50, scale_factor, min_x, min_y, max_x, max_y)
+
+        turtle.listen()
+        turtle.onkey(zoom_in, "i")  # Press 'i' to zoom in
+        turtle.onkey(zoom_out, "o")  # Press 'o' to zoom out
+        turtle.onkey(pan_left, "Left")  # Press left arrow to pan left
+        turtle.onkey(pan_right, "Right")  # Press right arrow to pan right
+        turtle.onkey(pan_up, "Up")  # Press up arrow to pan up
+        turtle.onkey(pan_down, "Down")  # Press down arrow to pan down
+        turtle.mainloop()
+
     except turtle.Terminator:
         print("Turtle graphics window was closed. Restarting turtle environment...")
         turtle.Screen()  # Reinitialize the turtle screen
