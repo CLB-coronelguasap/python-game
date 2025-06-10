@@ -1,6 +1,8 @@
 import turtle
 from svg.path import parse_path, Move, Line, CubicBezier, QuadraticBezier, Arc
 from xml.etree import ElementTree as ET
+import pycountry
+import os
 
 def draw_segment(t, segment, scale):
     """Draw a single segment using a turtle."""
@@ -26,8 +28,18 @@ def draw_segment(t, segment, scale):
             point = segment.point(t_val)
             t.goto(point.real * scale, -point.imag * scale)
 
+def get_country_name_from_filename(filename):
+    """Extract the country name from the filename based on its abbreviation."""
+    abbreviation = filename.split('.')[0].upper()  # Get the part before the extension and convert to uppercase
+    country = pycountry.countries.get(alpha_2=abbreviation)
+    return country.name if country else "Unknown Country"
+
 def svg_to_turtle(svg_file):
     try:
+        # Get the country name from the filename
+        country_name = get_country_name_from_filename(os.path.basename(svg_file))
+        print(f"Rendering map for: {country_name}")
+
         # Reset the turtle environment
         turtle.clearscreen()  # Clears the screen and resets all turtles
         turtle.tracer(0)  # Disable screen updates for faster drawing
@@ -96,17 +108,15 @@ def svg_to_turtle(svg_file):
         paths = [parse_path(path_element.attrib.get('d')) for path_element in path_elements if path_element.attrib.get('d')]
         max_segments = max(len(path) for path in paths)
 
-        for i in range(max_segments):
-            for t, path in zip(turtles, paths):
-                if i < len(path):
-                    segment = path[i]
-                    if i == 0:  # Start filling at the beginning of the path
-                        t.begin_fill()
-                    draw_segment(t, segment, scale_factor)  # Apply scale factor to drawing
-            for t, path in zip(turtles, paths):
-                if i == len(path) - 1:  # End filling at the end of the path
-                    t.end_fill()
-                    t.hideturtle()  # Hide the turtle after it finishes drawing
+        for path, t in zip(paths, turtles):
+            t.penup()
+            t.goto(path[0].start.real * scale_factor, -path[0].start.imag * scale_factor)
+            t.begin_fill()
+            for segment in path:
+                draw_segment(t, segment, scale_factor)
+            t.goto(path[0].start.real * scale_factor, -path[0].start.imag * scale_factor)  # Close the path
+            t.end_fill()
+            t.hideturtle()
 
         turtle.update()  # Re-enable screen updates
     except turtle.Terminator:
@@ -116,7 +126,8 @@ def svg_to_turtle(svg_file):
 
 # Example usage
 while True:
-    svg_file_path = input("Enter path to SVG file (or 'exit' to quit): ")
-    if svg_file_path.lower() == 'exit':
+    g = input("Enter path to SVG file (or 'exit' to quit): ").upper()
+    svg_file_path = "maps/"+ g +".svg"
+    if g.lower() == 'exit':
         break
     svg_to_turtle(svg_file_path)
